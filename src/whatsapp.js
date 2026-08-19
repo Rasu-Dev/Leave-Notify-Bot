@@ -1,22 +1,35 @@
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
-const { Client, LocalAuth } = require('whatsapp-web.js');
-
-const DATA_DIR = process.env.DATA_DIR || './data';
-const GROUP_CACHE_FILE = path.join(DATA_DIR, 'state', 'group.json');
+const { Client, LocalAuth, RemoteAuth } = require('whatsapp-web.js');
+const store = require('./store');
+const config = require('./config');
 
 const state = {
   client: null,
   ready: false,
   latestQr: null, // raw QR string while waiting for scan
   groupId: null,
+  sessionSaved: false,
 };
+
+function authStrategy() {
+  const dataPath = path.join(config.DATA_DIR, 'session');
+  if (store.usingMongo()) {
+    // Session lives in MongoDB — survives Render free-tier restarts (no disk).
+    const { MongoStore } = require('wwebjs-mongo');
+    return new RemoteAuth({
+      store: new MongoStore({ mongoose: store.mongooseInstance() }),
+      dataPath,
+      backupSyncIntervalMs: 300000,
+    });
+  }
+  return new LocalAuth({ dataPath });
+}
 
 function createClient() {
   const client = new Client({
-    authStrategy: new LocalAuth({ dataPath: path.join(DATA_DIR, 'session') }),
+    authStrategy: authStrategy(),
     puppeteer: {
       headless: true,
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
@@ -37,6 +50,10 @@ function createClient() {
   });
 
   client.on('authenticated', () => console.log('[whatsapp] authenticated'));
+  client.on('remote_session_saved', () => {
+    state.sessionSaved = true;
+    console.log('[whatsapp] session saved to MongoDB — QR scan will survive restarts from now on');
+  });
   client.on('auth_failure', (msg) => console.error('[whatsapp] auth failure:', msg));
   client.on('disconnected', (reason) => {
     state.ready = false;
@@ -48,30 +65,17 @@ function createClient() {
   return client;
 }
 
-function loadCachedGroupId() {
-  try {
-    return JSON.parse(fs.readFileSync(GROUP_CACHE_FILE, 'utf8')).groupId;
-  } catch {
-    return null;
-  }
-}
-
-function cacheGroupId(groupId) {
-  fs.mkdirSync(path.dirname(GROUP_CACHE_FILE), { recursive: true });
-  fs.writeFileSync(GROUP_CACHE_FILE, JSON.stringify({ groupId }, null, 2));
-}
-
 /** Resolve the target group chat id from invite code or name; caches result. */
 async function resolveGroupId() {
   if (state.groupId) return state.groupId;
-  const cached = loadCachedGroupId();
+  const cached = await store.getGroupId();
   if (cached) {
     state.groupId = cached;
     return cached;
   }
   if (!state.ready) throw new Error('WhatsApp client not ready');
 
-  const inviteCode = (process.env.GROUP_INVITE_CODE || '')
+  const inviteCode = config.GROUP_INVITE_CODE
     .replace(/^https?:\/\/chat\.whatsapp\.com\//i, '')
     .replace(/[?#].*$/, '')
     .trim();
@@ -88,17 +92,17 @@ async function resolveGroupId() {
       if (joinedId) groupId = typeof joinedId === 'string' ? joinedId : joinedId._serialized;
     }
     state.groupId = groupId;
-    cacheGroupId(groupId);
+    await store.setGroupId(groupId);
     return groupId;
   }
 
-  const groupName = process.env.GROUP_NAME;
+  const groupName = config.GROUP_NAME;
   if (groupName) {
     const chats = await state.client.getChats();
     const group = chats.find((c) => c.isGroup && c.name === groupName);
     if (!group) throw new Error(`Group named "${groupName}" not found among the bot's chats`);
     state.groupId = group.id._serialized;
-    cacheGroupId(state.groupId);
+    await store.setGroupId(state.groupId);
     return state.groupId;
   }
 
@@ -111,11 +115,12 @@ async function sendToGroup(message) {
   await state.client.sendMessage(groupId, message);
 }
 
-function status() {
+async function status() {
   return {
     ready: state.ready,
     awaitingQrScan: Boolean(state.latestQr),
-    groupId: state.groupId || loadCachedGroupId(),
+    sessionStorage: store.usingMongo() ? `mongodb (saved: ${state.sessionSaved})` : 'local disk',
+    groupId: state.groupId || (await store.getGroupId()),
   };
 }
 

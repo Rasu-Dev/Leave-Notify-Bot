@@ -1,38 +1,17 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
-const { findLongBreaks, daysBetween, weekdayOf } = require('./breaks');
+const { findLongBreaks, daysBetween, addDays, weekdayOf } = require('./breaks');
+const store = require('./store');
+const { NOTIFY_DAYS, MIN_BREAK_DAYS, TZ } = require('./config');
 
-const DATA_DIR = process.env.DATA_DIR || './data';
-const NOTIFY_DAYS = Number(process.env.NOTIFY_DAYS || 60);
-const STATE_FILE = path.join(DATA_DIR, 'state', 'notified.json');
+const FOOTER = '\n\n_note: this is an automated message_';
+// Warn this many days before the alert horizon reaches a year with no holiday file.
+const CALENDAR_WARN_BUFFER = 15;
 
 function today() {
   if (process.env.FAKE_TODAY) return process.env.FAKE_TODAY;
-  // Date in the configured timezone (TZ env), not UTC.
-  return new Date().toLocaleDateString('en-CA', { timeZone: process.env.TZ || 'Asia/Kolkata' });
-}
-
-function loadCalendars() {
-  const dir = path.join(__dirname, '..', 'data');
-  return fs
-    .readdirSync(dir)
-    .filter((f) => /^holidays-\d{4}\.json$/.test(f))
-    .map((f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')));
-}
-
-function loadState() {
-  try {
-    return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-  } catch {
-    return { notified: [] };
-  }
-}
-
-function saveState(state) {
-  fs.mkdirSync(path.dirname(STATE_FILE), { recursive: true });
-  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+  // Date in the configured timezone, not UTC.
+  return new Date().toLocaleDateString('en-CA', { timeZone: TZ });
 }
 
 function shortDate(dateStr) {
@@ -41,41 +20,108 @@ function shortDate(dateStr) {
   return `${weekdayOf(dateStr).slice(0, 3)} ${String(d).padStart(2, '0')} ${month} ${y}`;
 }
 
-function formatMessage(brk, daysUntil) {
-  const when = daysUntil === 0 ? 'Starts today' : daysUntil === 1 ? 'Starts tomorrow' : `Starts in ${daysUntil} days`;
+// e.g. "Fri 02 Oct" — without the year, for mid-sentence use.
+function shortDay(dateStr) {
+  return shortDate(dateStr).replace(/ \d{4}$/, '');
+}
+
+// The holiday the break is known by: prefer a named festival over weekly offs
+// and First Saturdays; drop "(Moved …)" annotations.
+function breakTitle(brk) {
+  const named = brk.reasons.find((r) => r !== 'Sunday' && !r.startsWith('First Saturday'));
+  const title = named || brk.reasons.find((r) => r !== 'Sunday') || 'Long weekend';
+  return title.replace(/\s*\(Moved[^)]*\)/i, '');
+}
+
+function breakLine(brk) {
+  return `*${breakTitle(brk)}* break — ${brk.days} days leave (*${shortDate(brk.start)} – ${shortDate(brk.end)}*)`;
+}
+
+function formatOutbound(brk) {
   return [
-    '🚂 *Long break alert!*',
-    `*${shortDate(brk.start)} – ${shortDate(brk.end)}* — ${brk.days} days off`,
-    `(${brk.reasons.join(' + ')})`,
-    `${when} — book your train tickets now! 🎫`,
+    '🎫 *Tomorrow is ticket opening!*',
+    breakLine(brk),
+    `Booking for ${shortDay(brk.start)} opens *tomorrow* on IRCTC — be ready at 8 AM! 🚂`,
+  ].join('\n');
+}
+
+function formatReturn(brk) {
+  return [
+    '🔁 *Return ticket opens tomorrow!*',
+    breakLine(brk),
+    `Returning on ${shortDay(brk.end)}? Booking opens *tomorrow* on IRCTC — be ready at 8 AM! 🚂`,
+  ].join('\n');
+}
+
+function formatTatkal(brk) {
+  const eveBefore = shortDay(addDays(brk.start, -1));
+  return [
+    '⚡ *Tatkal alert!*',
+    breakLine(brk),
+    `Leaving tomorrow (${eveBefore}) night? Tatkal for ${eveBefore} trains opens *TODAY at 11 AM* (AC: 10 AM)! ⏰`,
+    `Tatkal for ${shortDay(brk.start)} trains opens tomorrow at 11 AM.`,
   ].join('\n');
 }
 
 /**
- * Find long breaks due for notification: starting within NOTIFY_DAYS from today
- * and not yet notified. Returns [{ break, daysUntil, message }].
+ * All notification events due today, each with a unique dedup key. Alerts fire
+ * only on their exact day — a missed day is skipped silently, never caught up
+ * later (state is ephemeral on the free tier; catch-ups would repeat after
+ * every restart).
+ * - out:{start} — normal booking for the outbound journey (break start) opens
+ *   NOTIFY_DAYS before it; alert the day before it opens.
+ * - ret:{end} — same for the return journey (break end).
+ * - tat:{start} — tatkal opens 1 day before travel at 11 AM; alert two days
+ *   before the break (for the leave-the-night-before train).
+ * - cal:{year}:{month} — the alert horizon reaches a year whose holiday list is
+ *   missing; reminds the group once a month until it is added.
+ * Returns [{ key, brk, message }].
  */
-function dueNotifications() {
+async function dueNotifications() {
   const todayStr = today();
-  const state = loadState();
+  const notified = await store.getNotified();
   const due = [];
-  for (const calendar of loadCalendars()) {
-    for (const brk of findLongBreaks(calendar)) {
-      const daysUntil = daysBetween(todayStr, brk.start);
-      if (daysUntil >= 0 && daysUntil <= NOTIFY_DAYS && !state.notified.includes(brk.start)) {
-        due.push({ brk, daysUntil, message: formatMessage(brk, daysUntil) });
+  const push = (key, brk, message) => {
+    if (!notified.includes(key)) due.push({ key, brk, message: message + FOOTER });
+  };
+
+  const calendars = await store.getCalendars();
+
+  const horizon = addDays(todayStr, NOTIFY_DAYS + 1 + CALENDAR_WARN_BUFFER);
+  const loadedYears = new Set(calendars.map((c) => c.year));
+  for (const year of new Set([Number(todayStr.slice(0, 4)), Number(horizon.slice(0, 4))])) {
+    if (!loadedYears.has(year)) {
+      push(
+        `cal:${year}:${todayStr.slice(0, 7)}`,
+        null,
+        [
+          `⚠️ *Holiday list for ${year} is not updated!*`,
+          `Ticket alerts for ${year} breaks cannot be sent until it is added.`,
+          `Admin: run the ingest script for the ${year} holiday list (see README → "Updating for a new year").`,
+        ].join('\n')
+      );
+    }
+  }
+
+  for (const calendar of calendars) {
+    for (const brk of findLongBreaks(calendar, MIN_BREAK_DAYS)) {
+      const untilStart = daysBetween(todayStr, brk.start);
+      const untilEnd = daysBetween(todayStr, brk.end);
+
+      if (untilStart - NOTIFY_DAYS === 1) {
+        push(`out:${brk.start}`, brk, formatOutbound(brk));
+      }
+
+      if (untilEnd - NOTIFY_DAYS === 1) {
+        push(`ret:${brk.end}`, brk, formatReturn(brk));
+      }
+
+      if (untilStart === 2) {
+        push(`tat:${brk.start}`, brk, formatTatkal(brk));
       }
     }
   }
   return due;
-}
-
-function markNotified(brk) {
-  const state = loadState();
-  if (!state.notified.includes(brk.start)) {
-    state.notified.push(brk.start);
-    saveState(state);
-  }
 }
 
 /**
@@ -84,21 +130,28 @@ function markNotified(brk) {
  * @param {{dryRun?: boolean}} opts
  */
 async function runDailyCheck(send, opts = {}) {
-  const due = dueNotifications();
+  const due = await dueNotifications();
   if (due.length === 0) {
     console.log(`[notifier] ${today()}: no notifications due`);
     return [];
   }
   for (const item of due) {
     if (opts.dryRun) {
-      console.log(`[notifier] DRY RUN — would send:\n${item.message}\n`);
+      console.log(`[notifier] DRY RUN — would send (${item.key}):\n${item.message}\n`);
       continue;
     }
     await send(item.message);
-    markNotified(item.brk);
-    console.log(`[notifier] notified for break starting ${item.brk.start}`);
+    await store.addNotified(item.key);
+    console.log(`[notifier] sent ${item.key}`);
   }
   return due;
 }
 
-module.exports = { runDailyCheck, dueNotifications, formatMessage, today };
+module.exports = {
+  runDailyCheck,
+  dueNotifications,
+  formatOutbound,
+  formatReturn,
+  formatTatkal,
+  today,
+};

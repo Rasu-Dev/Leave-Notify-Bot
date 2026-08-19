@@ -2,22 +2,24 @@ services:
   - type: web
     name: leave-bot
     runtime: docker
-    plan: starter # persistent disk requires a paid plan; free tier sleeps and loses the WhatsApp session
-    healthCheckPath: /
-    disk:
-      name: leave-bot-data
-      mountPath: /data
-      sizeGB: 1
+    plan: free # no disk — session & state live in MongoDB; keep awake with an external pinger (see README)
+    healthCheckPath: /health
     envVars:
-      - key: DATA_DIR
-        value: /data
       - key: TZ
         value: Asia/Kolkata
       - key: CRON_SCHEDULE
         value: "0 9 * * *"
       - key: NOTIFY_DAYS
         value: "60"
+      - key: MIN_BREAK_DAYS
+        value: "2"
+      - key: MONGODB_URI
+        sync: false # MongoDB Atlas connection string — stores WhatsApp session, state & calendars
       - key: GROUP_INVITE_CODE
         sync: false # paste the WhatsApp group invite link/code in the Render dashboard
       - key: TEST_TOKEN
         generateValue: true
+      - key: ADMIN_USER
+        value: admin
+      - key: ADMIN_PASS
+        sync: false # set the login password in the Render dashboard

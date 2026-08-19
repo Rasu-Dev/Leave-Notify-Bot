@@ -1,29 +1,120 @@
 {
   "year": 2026,
-  "weeklyOff": ["Sunday"],
+  "weeklyOff": [
+    "Sunday"
+  ],
   "holidays": [
-    { "date": "2026-01-01", "name": "New Year's Day" },
-    { "date": "2026-01-14", "name": "Pongal" },
-    { "date": "2026-01-15", "name": "First Saturday (Moved)" },
-    { "date": "2026-01-26", "name": "Republic Day" },
-    { "date": "2026-02-14", "name": "First Saturday (Moved)" },
-    { "date": "2026-03-20", "name": "First Saturday (Moved)" },
-    { "date": "2026-03-21", "name": "Ramzan (Eid al-Fitr)" },
-    { "date": "2026-04-03", "name": "Good Friday" },
-    { "date": "2026-04-04", "name": "First Saturday" },
-    { "date": "2026-05-01", "name": "May Day (Labour Day)" },
-    { "date": "2026-05-02", "name": "First Saturday" },
-    { "date": "2026-05-27", "name": "Bakrid (Eid al-Adha)" },
-    { "date": "2026-06-06", "name": "First Saturday" },
-    { "date": "2026-07-04", "name": "First Saturday" },
-    { "date": "2026-08-14", "name": "First Saturday (Moved)" },
-    { "date": "2026-08-15", "name": "Independence Day" },
-    { "date": "2026-09-05", "name": "First Saturday" },
-    { "date": "2026-10-02", "name": "Gandhi Jayanthi" },
-    { "date": "2026-10-03", "name": "First Saturday" },
-    { "date": "2026-11-07", "name": "First Saturday" },
-    { "date": "2026-11-09", "name": "Deepavali (Moved from Sunday)" },
-    { "date": "2026-12-25", "name": "Christmas" },
-    { "date": "2026-12-26", "name": "First Saturday (Moved)" }
+    {
+      "date": "2026-01-01",
+      "name": "New Year's Day"
+    },
+    {
+      "date": "2026-01-14",
+      "name": "Pongal"
+    },
+    {
+      "date": "2026-01-15",
+      "name": "First Saturday (Moved)"
+    },
+    {
+      "date": "2026-01-26",
+      "name": "Republic Day"
+    },
+    {
+      "date": "2026-02-14",
+      "name": "First Saturday (Moved)"
+    },
+    {
+      "date": "2026-03-20",
+      "name": "First Saturday (Moved)"
+    },
+    {
+      "date": "2026-03-21",
+      "name": "Ramzan (Eid al-Fitr)"
+    },
+    {
+      "date": "2026-04-03",
+      "name": "Good Friday"
+    },
+    {
+      "date": "2026-04-04",
+      "name": "First Saturday"
+    },
+    {
+      "date": "2026-05-01",
+      "name": "May Day (Labour Day)"
+    },
+    {
+      "date": "2026-05-02",
+      "name": "First Saturday"
+    },
+    {
+      "date": "2026-05-27",
+      "name": "Bakrid (Eid al-Adha)"
+    },
+    {
+      "date": "2026-06-06",
+      "name": "First Saturday"
+    },
+    {
+      "date": "2026-07-04",
+      "name": "First Saturday"
+    },
+    {
+      "date": "2026-08-14",
+      "name": "First Saturday (Moved)"
+    },
+    {
+      "date": "2026-08-15",
+      "name": "Independence Day"
+    },
+    {
+      "date": "2026-08-24",
+      "name": "DUMMY Test Holiday"
+    },
+    {
+      "date": "2026-08-25",
+      "name": "DUMMY Test Holiday"
+    },
+    {
+      "date": "2026-09-05",
+      "name": "First Saturday"
+    },
+    {
+      "date": "2026-10-02",
+      "name": "Gandhi Jayanthi"
+    },
+    {
+      "date": "2026-10-03",
+      "name": "First Saturday"
+    },
+    {
+      "date": "2026-10-20",
+      "name": "DUMMY Test Holiday"
+    },
+    {
+      "date": "2026-10-21",
+      "name": "DUMMY Test Holiday"
+    },
+    {
+      "date": "2026-10-26",
+      "name": "DUMMY Test Holiday"
+    },
+    {
+      "date": "2026-11-07",
+      "name": "First Saturday"
+    },
+    {
+      "date": "2026-11-09",
+      "name": "Deepavali (Moved from Sunday)"
+    },
+    {
+      "date": "2026-12-25",
+      "name": "Christmas"
+    },
+    {
+      "date": "2026-12-26",
+      "name": "First Saturday (Moved)"
+    }
   ]
 }

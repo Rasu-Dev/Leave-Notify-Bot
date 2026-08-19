@@ -4,10 +4,11 @@
   "description": "Notifies a WhatsApp group 60 days before long office breaks (3+ continuous days off) so everyone can book train tickets.",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js",
-    "start:local": "node --env-file=.env src/index.js",
-    "dry-run": "node src/index.js --dry-run",
-    "ingest": "node src/ingest.js",
+    "start": "node --env-file-if-exists=.env src/index.js",
+    "start:local": "node --env-file-if-exists=.env src/index.js",
+    "dev": "nodemon --env-file-if-exists=.env src/index.js",
+    "dry-run": "node --env-file-if-exists=.env src/index.js --dry-run",
+    "ingest": "node --env-file-if-exists=.env src/ingest.js",
     "test": "node --test"
   },
   "engines": {
@@ -15,11 +16,14 @@
   },
   "dependencies": {
     "express": "^4.19.2",
+    "mongoose": "^8.6.0",
     "node-cron": "^3.0.3",
     "qrcode": "^1.5.4",
-    "whatsapp-web.js": "^1.26.0"
+    "whatsapp-web.js": "^1.26.0",
+    "wwebjs-mongo": "^1.1.0"
   },
   "devDependencies": {
+    "nodemon": "^3.1.14",
     "tesseract.js": "^5.1.1"
   }
 }
