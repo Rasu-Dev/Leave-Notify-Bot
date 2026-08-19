@@ -1,0 +1,25 @@
+{
+  "name": "leave-bot",
+  "version": "1.0.0",
+  "description": "Notifies a WhatsApp group 60 days before long office breaks (3+ continuous days off) so everyone can book train tickets.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "start:local": "node --env-file=.env src/index.js",
+    "dry-run": "node src/index.js --dry-run",
+    "ingest": "node src/ingest.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "node-cron": "^3.0.3",
+    "qrcode": "^1.5.4",
+    "whatsapp-web.js": "^1.26.0"
+  },
+  "devDependencies": {
+    "tesseract.js": "^5.1.1"
+  }
+}
