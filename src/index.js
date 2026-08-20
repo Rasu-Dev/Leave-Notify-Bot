@@ -23,7 +23,22 @@ async function main() {
     process.exit(0);
   }
 
-  whatsapp.createClient();
+  // Boot-time check: as soon as WhatsApp connects, send anything missed while
+  // the bot was down (e.g. "booking already open" catch-ups). Runs once per
+  // boot — dedup keys in the store prevent repeats across restarts anyway.
+  let bootCheckDone = false;
+  whatsapp.createClient({
+    onReady: async () => {
+      if (bootCheckDone) return;
+      bootCheckDone = true;
+      try {
+        await runDailyCheck(whatsapp.sendToGroup);
+      } catch (err) {
+        bootCheckDone = false; // retry on the next reconnect
+        console.error('[boot-check] failed:', err.message);
+      }
+    },
+  });
 
   const app = express();
   app.use(express.urlencoded({ extended: false }));

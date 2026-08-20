@@ -9,7 +9,7 @@ Reminds a WhatsApp group **the day before IRCTC ticket booking opens** for every
   - **Outbound** 🎫 — for a break starting on date X, messaged on **X − 61**: "Tomorrow is ticket opening for *{holiday}* — N days leave".
   - **Return** 🔁 — booking for the return journey (break end date Y) opens Y − 60, messaged on **Y − 61**: "Return ticket opens tomorrow".
   - **Tatkal** ⚡ — tatkal opens at 11 AM (AC 10 AM) one day before travel. For people leaving the night before the break, messaged on **X − 2** ("tatkal for tomorrow-night's train opens TODAY at 11 AM").
-- Each alert fires **only on its exact day** — if the bot was down that day, the alert is skipped silently (no catch-ups). Sent notifications are remembered in MongoDB (or a local state file in dev) so the same alert is never repeated. The check runs daily at 9:00 AM IST. Every message ends with "_note: this is an automated message_".
+- On the exact alert day the "opens tomorrow" wording is used. If the bot was down that day, a **catch-up** fires on the next check instead — "Ticket booking is already open — book ASAP" (outbound/return, any time while the window is open) or "Tatkal opens TODAY at 11 AM" (one day before the break). Sent notifications are remembered in MongoDB (or a local state file in dev) so the same alert is never repeated. The check runs daily at 9:00 AM IST **and once at every boot** as soon as WhatsApp connects, so a fresh deploy immediately announces any break whose booking window is already open. Every message ends with "_note: this is an automated message_".
 - **Missing next year's list**: once the alert horizon (~76 days ahead) reaches a year with no `data/holidays-<year>.json`, the bot posts a monthly warning in the group ("Holiday list for 2027 is not updated!") until the file is added — starting around early/mid November.
 - Messages are posted via [Baileys](https://github.com/WhiskeySockets/Baileys) — the bot logs in as a linked device of a real WhatsApp number (one-time QR scan) over WhatsApp's WebSocket protocol directly, no browser. (Previously whatsapp-web.js, whose headless Chromium needed 300–500MB and OOMed Render's free 512MB tier.)
 
@@ -36,7 +36,7 @@ Render's free tier spins the service down after ~15 minutes without **external**
 Free-tier caveats:
 
 - **No persistent disk** — the filesystem is wiped on every deploy/restart. The WhatsApp session and sent-notification state survive because they live in MongoDB (`MONGODB_URI`); without it, every restart would need a fresh QR scan.
-- Alerts fire only on their exact day — if the service was asleep or down past 9 AM on an alert day, that alert is skipped silently, never caught up later.
+- If the service was asleep or down past 9 AM on an alert day, the alert is caught up ("booking already open") on the next boot or 9 AM check — dedup keys in MongoDB stop it from repeating.
 - One always-on service uses ~744 of the 750 free instance-hours/month — it fits, but only one such service per account.
 
 ## Endpoints

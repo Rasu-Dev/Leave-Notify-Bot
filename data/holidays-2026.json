@@ -69,14 +69,6 @@
       "name": "Independence Day"
     },
     {
-      "date": "2026-08-24",
-      "name": "DUMMY Test Holiday"
-    },
-    {
-      "date": "2026-08-25",
-      "name": "DUMMY Test Holiday"
-    },
-    {
       "date": "2026-09-05",
       "name": "First Saturday"
     },
@@ -89,15 +81,27 @@
       "name": "First Saturday"
     },
     {
-      "date": "2026-10-20",
-      "name": "DUMMY Test Holiday"
-    },
-    {
       "date": "2026-10-21",
       "name": "DUMMY Test Holiday"
     },
     {
+      "date": "2026-10-22",
+      "name": "DUMMY Test Holiday"
+    },
+    {
+      "date": "2026-10-24",
+      "name": "DUMMY Test Holiday"
+    },
+    {
       "date": "2026-10-26",
+      "name": "DUMMY Test Holiday"
+    },
+    {
+      "date": "2026-10-28",
+      "name": "DUMMY Test Holiday"
+    },
+    {
+      "date": "2026-10-29",
       "name": "DUMMY Test Holiday"
     },
     {

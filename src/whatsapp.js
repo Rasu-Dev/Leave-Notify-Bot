@@ -23,9 +23,11 @@ const state = {
   starting: false,
   reconnectDelay: 3000,
   clearAuth: null,
+  onReady: null,
 };
 
-function createClient() {
+function createClient({ onReady } = {}) {
+  state.onReady = onReady || null;
   start().catch((err) => {
     console.error('[whatsapp] failed to start:', err.message);
     scheduleRestart();
@@ -78,6 +80,11 @@ async function start() {
         state.ready = true;
         state.reconnectDelay = 3000;
         console.log('[whatsapp] client ready');
+        if (state.onReady) {
+          Promise.resolve(state.onReady()).catch((err) =>
+            console.error('[whatsapp] onReady callback failed:', err.message)
+          );
+        }
       }
       if (connection === 'close') {
         state.ready = false;

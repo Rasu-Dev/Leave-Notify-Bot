@@ -63,16 +63,47 @@ function formatTatkal(brk) {
   ].join('\n');
 }
 
+// Catch-up variants — sent when the bot was down on the exact alert day and the
+// booking window has already opened meanwhile.
+
+function formatOutboundOpen(brk) {
+  return [
+    '🎫 *Ticket booking is already open!*',
+    breakLine(brk),
+    `Booking for ${shortDay(brk.start)} opened on ${shortDay(addDays(brk.start, -NOTIFY_DAYS))} on IRCTC — book ASAP if you haven't! 🚂`,
+  ].join('\n');
+}
+
+function formatReturnOpen(brk) {
+  return [
+    '🔁 *Return ticket booking is already open!*',
+    breakLine(brk),
+    `Returning on ${shortDay(brk.end)}? Booking opened on ${shortDay(addDays(brk.end, -NOTIFY_DAYS))} on IRCTC — book ASAP if you haven't! 🚂`,
+  ].join('\n');
+}
+
+function formatTatkalToday(brk) {
+  return [
+    '⚡ *Tatkal alert!*',
+    breakLine(brk),
+    `Tatkal for tomorrow's (${shortDay(brk.start)}) trains opens *TODAY at 11 AM* (AC: 10 AM)! ⏰`,
+  ].join('\n');
+}
+
 /**
- * All notification events due today, each with a unique dedup key. Alerts fire
- * only on their exact day — a missed day is skipped silently, never caught up
- * later (state is ephemeral on the free tier; catch-ups would repeat after
- * every restart).
+ * All notification events due today, each with a unique dedup key. On the exact
+ * alert day the normal "opens tomorrow" wording is used; if that day was missed
+ * (bot down/asleep) a catch-up "already open" alert fires on the next check —
+ * sent keys are remembered in MongoDB (or the local state file), so nothing
+ * repeats.
  * - out:{start} — normal booking for the outbound journey (break start) opens
- *   NOTIFY_DAYS before it; alert the day before it opens.
- * - ret:{end} — same for the return journey (break end).
+ *   NOTIFY_DAYS before it; alert the day before it opens, or catch up any time
+ *   while booking is open and the break hasn't started.
+ * - ret:{end} — same for the return journey (break end); catch-up window runs
+ *   until the break ends.
  * - tat:{start} — tatkal opens 1 day before travel at 11 AM; alert two days
- *   before the break (for the leave-the-night-before train).
+ *   before the break (for the leave-the-night-before train), or catch up one
+ *   day before ("opens TODAY").
  * - cal:{year}:{month} — the alert horizon reaches a year whose holiday list is
  *   missing; reminds the group once a month until it is added.
  * Returns [{ key, brk, message }].
@@ -110,14 +141,20 @@ async function dueNotifications() {
 
       if (untilStart - NOTIFY_DAYS === 1) {
         push(`out:${brk.start}`, brk, formatOutbound(brk));
+      } else if (untilStart >= 1 && untilStart <= NOTIFY_DAYS) {
+        push(`out:${brk.start}`, brk, formatOutboundOpen(brk));
       }
 
       if (untilEnd - NOTIFY_DAYS === 1) {
         push(`ret:${brk.end}`, brk, formatReturn(brk));
+      } else if (untilEnd >= 1 && untilEnd <= NOTIFY_DAYS) {
+        push(`ret:${brk.end}`, brk, formatReturnOpen(brk));
       }
 
       if (untilStart === 2) {
         push(`tat:${brk.start}`, brk, formatTatkal(brk));
+      } else if (untilStart === 1) {
+        push(`tat:${brk.start}`, brk, formatTatkalToday(brk));
       }
     }
   }
@@ -153,5 +190,8 @@ module.exports = {
   formatOutbound,
   formatReturn,
   formatTatkal,
+  formatOutboundOpen,
+  formatReturnOpen,
+  formatTatkalToday,
   today,
 };

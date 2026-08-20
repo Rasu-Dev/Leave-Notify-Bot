@@ -140,11 +140,36 @@ test('timing: Sep 30 sends the tatkal alert for the Oct 2 break', async () => {
   assert.ok(!(await dueOn('2026-09-29')).some((d) => d.key === 'tat:2026-10-02'));
 });
 
-test('timing: missed alert days are skipped, never caught up', async () => {
-  // Aug 2 was the outbound alert day for the Oct 2 break — a day later it must not fire.
-  assert.ok(!(await dueOn('2026-08-03')).some((d) => d.key === 'out:2026-10-02'));
-  // Sep 30 was the tatkal alert day — no day-before fallback.
-  assert.ok(!(await dueOn('2026-10-01')).some((d) => d.key === 'tat:2026-10-02'));
+test('timing: missed outbound alert is caught up with "already open" wording', async () => {
+  // Aug 2 was the outbound alert day for the Oct 2 break — a day later the
+  // catch-up fires instead (booking window already open).
+  const due = await dueOn('2026-08-03');
+  const oct = due.find((d) => d.key === 'out:2026-10-02');
+  assert.ok(oct, 'missed Oct 2 outbound alert should be caught up');
+  assert.match(oct.message, /Ticket booking is already open/);
+  const ret = due.find((d) => d.key === 'ret:2026-10-04');
+  assert.ok(!ret, 'return alert day (Aug 4) has not passed yet — no catch-up');
+});
+
+test('timing: missed return alert is caught up until the break ends', async () => {
+  const due = await dueOn('2026-10-03');
+  const ret = due.find((d) => d.key === 'ret:2026-10-04');
+  assert.ok(ret, 'missed Oct 4 return alert should be caught up mid-break');
+  assert.match(ret.message, /Return ticket booking is already open/);
+});
+
+test('timing: missed tatkal alert falls back to "opens TODAY" the day before the break', async () => {
+  const due = await dueOn('2026-10-01');
+  const tat = due.find((d) => d.key === 'tat:2026-10-02');
+  assert.ok(tat, 'tatkal catch-up should fire 1 day before the break');
+  assert.match(tat.message, /opens \*TODAY at 11 AM\*/);
+});
+
+test('catch-ups already noted in the store are never repeated', async () => {
+  const store = require('../src/store');
+  await store.addNotified('out:2026-12-25');
+  // Nov 1 is inside the Dec 25 break's catch-up window, but the key is noted.
+  assert.ok(!(await dueOn('2026-11-01')).some((d) => d.key === 'out:2026-12-25'));
 });
 
 test('warns when the alert horizon reaches a year with no holiday file', async () => {
