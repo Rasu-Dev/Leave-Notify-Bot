@@ -11,7 +11,7 @@ Reminds a WhatsApp group **the day before IRCTC ticket booking opens** for every
   - **Tatkal** ⚡ — tatkal opens at 11 AM (AC 10 AM) one day before travel. For people leaving the night before the break, messaged on **X − 2** ("tatkal for tomorrow-night's train opens TODAY at 11 AM").
 - Each alert fires **only on its exact day** — if the bot was down that day, the alert is skipped silently (no catch-ups). Sent notifications are remembered in MongoDB (or a local state file in dev) so the same alert is never repeated. The check runs daily at 9:00 AM IST. Every message ends with "_note: this is an automated message_".
 - **Missing next year's list**: once the alert horizon (~76 days ahead) reaches a year with no `data/holidays-<year>.json`, the bot posts a monthly warning in the group ("Holiday list for 2027 is not updated!") until the file is added — starting around early/mid November.
-- Messages are posted via [whatsapp-web.js](https://wwebjs.dev/) — the bot logs in as a linked device of a real WhatsApp number (one-time QR scan).
+- Messages are posted via [Baileys](https://github.com/WhiskeySockets/Baileys) — the bot logs in as a linked device of a real WhatsApp number (one-time QR scan) over WhatsApp's WebSocket protocol directly, no browser. (Previously whatsapp-web.js, whose headless Chromium needed 300–500MB and OOMed Render's free 512MB tier.)
 
 Breaks detected for 2026: 3-day — **Mar 20–22, Apr 3–5, May 1–3, Aug 14–16, Oct 2–4, Nov 7–9, Dec 25–27**; 2-day — **Jan 14–15, Jan 25–26, Feb 14–15, Jun 6–7, Jul 4–5, Sep 5–6**.
 

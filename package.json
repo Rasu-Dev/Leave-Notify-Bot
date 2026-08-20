@@ -15,12 +15,12 @@
     "node": ">=20"
   },
   "dependencies": {
+    "baileys": "6.7.24",
     "express": "^4.19.2",
     "mongoose": "^8.6.0",
     "node-cron": "^3.0.3",
-    "qrcode": "^1.5.4",
-    "whatsapp-web.js": "^1.26.0",
-    "wwebjs-mongo": "^1.1.0"
+    "pino": "^9.6.0",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "nodemon": "^3.1.14",

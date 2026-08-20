@@ -1,68 +1,116 @@
 'use strict';
 
-const path = require('path');
-const { Client, LocalAuth, RemoteAuth } = require('whatsapp-web.js');
+// WhatsApp client on Baileys — direct WebSocket, no browser. Chromium-based
+// whatsapp-web.js needed 300-500MB and OOMed Render's free 512MB tier.
+
+const pino = require('pino');
 const store = require('./store');
 const config = require('./config');
+const { useAuthState } = require('./baileys-auth');
+const baileys = require('baileys');
+
+const makeWASocket = baileys.default || baileys.makeWASocket;
+const { DisconnectReason, fetchLatestBaileysVersion, makeCacheableSignalKeyStore } = baileys;
+
+const logger = pino({ level: 'silent' });
 
 const state = {
-  client: null,
+  sock: null,
   ready: false,
   latestQr: null, // raw QR string while waiting for scan
   groupId: null,
   sessionSaved: false,
+  starting: false,
+  reconnectDelay: 3000,
+  clearAuth: null,
 };
 
-function authStrategy() {
-  const dataPath = path.join(config.DATA_DIR, 'session');
-  if (store.usingMongo()) {
-    // Session lives in MongoDB — survives Render free-tier restarts (no disk).
-    const { MongoStore } = require('wwebjs-mongo');
-    return new RemoteAuth({
-      store: new MongoStore({ mongoose: store.mongooseInstance() }),
-      dataPath,
-      backupSyncIntervalMs: 300000,
-    });
-  }
-  return new LocalAuth({ dataPath });
+function createClient() {
+  start().catch((err) => {
+    console.error('[whatsapp] failed to start:', err.message);
+    scheduleRestart();
+  });
 }
 
-function createClient() {
-  const client = new Client({
-    authStrategy: authStrategy(),
-    puppeteer: {
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-    },
-  });
+// Baileys sockets are single-use — every (re)connect builds a fresh one.
+async function start() {
+  if (state.starting) return;
+  state.starting = true;
+  try {
+    const auth = await useAuthState();
+    state.clearAuth = auth.clear;
+    const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: undefined }));
 
-  client.on('qr', (qr) => {
-    state.latestQr = qr;
-    state.ready = false;
-    console.log('[whatsapp] QR code received — open /qr in a browser and scan it with your phone');
-  });
+    const sock = makeWASocket({
+      version,
+      auth: {
+        creds: auth.state.creds,
+        keys: makeCacheableSignalKeyStore(auth.state.keys, logger),
+      },
+      logger,
+      syncFullHistory: false,
+      markOnlineOnConnect: false,
+      generateHighQualityLinkPreview: false,
+    });
+    state.sock = sock;
 
-  client.on('ready', () => {
-    state.latestQr = null;
-    state.ready = true;
-    console.log('[whatsapp] client ready');
-  });
+    sock.ev.on('creds.update', async () => {
+      try {
+        await auth.saveCreds();
+        if (store.usingMongo() && !state.sessionSaved) {
+          state.sessionSaved = true;
+          console.log('[whatsapp] session saved to MongoDB — QR scan will survive restarts from now on');
+        }
+      } catch (err) {
+        console.error('[whatsapp] failed to save credentials:', err.message);
+      }
+    });
 
-  client.on('authenticated', () => console.log('[whatsapp] authenticated'));
-  client.on('remote_session_saved', () => {
-    state.sessionSaved = true;
-    console.log('[whatsapp] session saved to MongoDB — QR scan will survive restarts from now on');
-  });
-  client.on('auth_failure', (msg) => console.error('[whatsapp] auth failure:', msg));
-  client.on('disconnected', (reason) => {
-    state.ready = false;
-    console.error('[whatsapp] disconnected:', reason);
-  });
+    sock.ev.on('connection.update', (update) => {
+      const { connection, lastDisconnect, qr } = update;
+      if (qr) {
+        state.latestQr = qr;
+        state.ready = false;
+        console.log('[whatsapp] QR code received — open /qr in a browser and scan it with your phone');
+      }
+      if (connection === 'open') {
+        state.latestQr = null;
+        state.ready = true;
+        state.reconnectDelay = 3000;
+        console.log('[whatsapp] client ready');
+      }
+      if (connection === 'close') {
+        state.ready = false;
+        const code = lastDisconnect?.error?.output?.statusCode;
+        if (code === DisconnectReason.loggedOut) {
+          console.error('[whatsapp] logged out — clearing session, a new QR scan is required');
+          state.sessionSaved = false;
+          state
+            .clearAuth()
+            .catch((err) => console.error('[whatsapp] failed to clear auth state:', err.message))
+            .finally(() => scheduleRestart(1000));
+        } else {
+          // Includes restartRequired (515), fired deliberately right after QR
+          // pairing — Baileys requires an immediate new socket there.
+          console.error(`[whatsapp] connection closed (code ${code}) — reconnecting`);
+          scheduleRestart(code === DisconnectReason.restartRequired ? 500 : undefined);
+        }
+      }
+    });
+  } finally {
+    state.starting = false;
+  }
+}
 
-  state.client = client;
-  client.initialize();
-  return client;
+function scheduleRestart(delayMs) {
+  const delay = delayMs ?? state.reconnectDelay;
+  state.reconnectDelay = Math.min(state.reconnectDelay * 2, 60000);
+  setTimeout(() => {
+    start().catch((err) => {
+      console.error('[whatsapp] restart failed:', err.message);
+      scheduleRestart();
+    });
+  }, delay);
 }
 
 /** Resolve the target group chat id from invite code or name; caches result. */
@@ -81,15 +129,13 @@ async function resolveGroupId() {
     .trim();
 
   if (inviteCode) {
-    const info = await state.client.getInviteInfo(inviteCode);
-    let groupId = info.id?._serialized || `${info.id.user}@g.us`;
+    const info = await state.sock.groupGetInviteInfo(inviteCode);
+    let groupId = info.id; // full JID like '1234567890@g.us'
     // Join the group if the bot's number isn't in it yet.
     try {
-      const chat = await state.client.getChatById(groupId);
-      if (!chat) throw new Error('not a member');
+      await state.sock.groupMetadata(groupId);
     } catch {
-      const joinedId = await state.client.acceptInvite(inviteCode);
-      if (joinedId) groupId = typeof joinedId === 'string' ? joinedId : joinedId._serialized;
+      groupId = await state.sock.groupAcceptInvite(inviteCode);
     }
     state.groupId = groupId;
     await store.setGroupId(groupId);
@@ -98,10 +144,10 @@ async function resolveGroupId() {
 
   const groupName = config.GROUP_NAME;
   if (groupName) {
-    const chats = await state.client.getChats();
-    const group = chats.find((c) => c.isGroup && c.name === groupName);
-    if (!group) throw new Error(`Group named "${groupName}" not found among the bot's chats`);
-    state.groupId = group.id._serialized;
+    const groups = await state.sock.groupFetchAllParticipating();
+    const group = Object.values(groups).find((g) => g.subject === groupName);
+    if (!group) throw new Error(`Group named "${groupName}" not found among the bot's groups`);
+    state.groupId = group.id;
     await store.setGroupId(state.groupId);
     return state.groupId;
   }
@@ -112,7 +158,7 @@ async function resolveGroupId() {
 async function sendToGroup(message) {
   if (!state.ready) throw new Error('WhatsApp client not ready — scan the QR at /qr first');
   const groupId = await resolveGroupId();
-  await state.client.sendMessage(groupId, message);
+  await state.sock.sendMessage(groupId, { text: message });
 }
 
 async function status() {
