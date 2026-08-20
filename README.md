@@ -6,7 +6,7 @@ Reminds a WhatsApp group **the day before IRCTC ticket booking opens** for every
 
 - Holiday data lives in [data/holidays-2026.json](data/holidays-2026.json) (hand-verified from the office holiday list).
 - IRCTC opens booking 60 days before the journey date. The bot sends three alerts per break:
-  - **Outbound** 🎫 — for a break starting on date X, messaged on **X − 61**: "Tomorrow is ticket opening for *{holiday}* — N days leave".
+  - **Outbound** 🎫 — people leave the **night before** the break, so for a break starting on date X the ticket to book is for journey date X − 1; its window opens X − 61, messaged on **X − 62**: "Booking for {X − 1} opens tomorrow".
   - **Return** 🔁 — booking for the return journey (break end date Y) opens Y − 60, messaged on **Y − 61**: "Return ticket opens tomorrow".
   - **Tatkal** ⚡ — tatkal opens at 11 AM (AC 10 AM) one day before travel. For people leaving the night before the break, messaged on **X − 2** ("tatkal for tomorrow-night's train opens TODAY at 11 AM").
 - On the exact alert day the "opens tomorrow" wording is used. If the bot was down that day, a **catch-up** fires on the next check instead — "Ticket booking is already open — book ASAP" (outbound/return, any time while the window is open) or "Tatkal opens TODAY at 11 AM" (one day before the break). Sent notifications are remembered in MongoDB (or a local state file in dev) so the same alert is never repeated. The check runs daily at 9:00 AM IST **and once at every boot** as soon as WhatsApp connects, so a fresh deploy immediately announces any break whose booking window is already open. Every message ends with "_note: this is an automated message_".

@@ -38,10 +38,12 @@ function breakLine(brk) {
 }
 
 function formatOutbound(brk) {
+  const eveBefore = shortDay(addDays(brk.start, -1));
   return [
     '🎫 *Tomorrow is ticket opening!*',
     breakLine(brk),
-    `Booking for ${shortDay(brk.start)} opens *tomorrow* on IRCTC — be ready at 8 AM! 🚂`,
+    `Leaving on ${eveBefore} night? Booking for ${eveBefore} opens *tomorrow* on IRCTC — be ready at 8 AM! 🚂`,
+    `(Travelling on ${shortDay(brk.start)}? Yours opens the day after.)`,
   ].join('\n');
 }
 
@@ -67,10 +69,11 @@ function formatTatkal(brk) {
 // booking window has already opened meanwhile.
 
 function formatOutboundOpen(brk) {
+  const eveBefore = shortDay(addDays(brk.start, -1));
   return [
     '🎫 *Ticket booking is already open!*',
     breakLine(brk),
-    `Booking for ${shortDay(brk.start)} opened on ${shortDay(addDays(brk.start, -NOTIFY_DAYS))} on IRCTC — book ASAP if you haven't! 🚂`,
+    `Booking for ${eveBefore} (night-before train) opened on ${shortDay(addDays(brk.start, -(NOTIFY_DAYS + 1)))} on IRCTC — book ASAP if you haven't! 🚂`,
   ].join('\n');
 }
 
@@ -96,9 +99,10 @@ function formatTatkalToday(brk) {
  * (bot down/asleep) a catch-up "already open" alert fires on the next check —
  * sent keys are remembered in MongoDB (or the local state file), so nothing
  * repeats.
- * - out:{start} — normal booking for the outbound journey (break start) opens
- *   NOTIFY_DAYS before it; alert the day before it opens, or catch up any time
- *   while booking is open and the break hasn't started.
+ * - out:{start} — the outbound ticket to book is for the night-before journey
+ *   (start − 1, leaving after work); its booking opens NOTIFY_DAYS before that
+ *   date. Alert the day before it opens (start − NOTIFY_DAYS − 2), or catch up
+ *   any time while booking is open and the break hasn't started.
  * - ret:{end} — same for the return journey (break end); catch-up window runs
  *   until the break ends.
  * - tat:{start} — tatkal opens 1 day before travel at 11 AM; alert two days
@@ -139,9 +143,9 @@ async function dueNotifications() {
       const untilStart = daysBetween(todayStr, brk.start);
       const untilEnd = daysBetween(todayStr, brk.end);
 
-      if (untilStart - NOTIFY_DAYS === 1) {
+      if (untilStart - NOTIFY_DAYS === 2) {
         push(`out:${brk.start}`, brk, formatOutbound(brk));
-      } else if (untilStart >= 1 && untilStart <= NOTIFY_DAYS) {
+      } else if (untilStart >= 1 && untilStart <= NOTIFY_DAYS + 1) {
         push(`out:${brk.start}`, brk, formatOutboundOpen(brk));
       }
 

@@ -61,13 +61,15 @@ test('breaks carry human-readable reasons', () => {
   assert.deepEqual(oct.reasons, ['Gandhi Jayanthi', 'First Saturday', 'Sunday']);
 });
 
-test('message: tomorrow is ticket opening', () => {
+test('message: tomorrow is ticket opening (night-before journey)', () => {
   const brk = findLongBreaks(calendar, 2).find((b) => b.start === '2026-10-02');
   const msg = formatOutbound(brk);
   assert.match(msg, /Tomorrow is ticket opening/);
   assert.match(msg, /\*Gandhi Jayanthi\* break — 3 days leave/);
   assert.match(msg, /Fri 02 Oct 2026 – Sun 04 Oct 2026/);
-  assert.match(msg, /opens \*tomorrow\* on IRCTC/);
+  // The ticket to book is for the night-before journey (Oct 1), not Oct 2.
+  assert.match(msg, /Leaving on Thu 01 Oct night\? Booking for Thu 01 Oct opens \*tomorrow\* on IRCTC/);
+  assert.match(msg, /Travelling on Fri 02 Oct\? Yours opens the day after/);
 });
 
 test('message: 2-day leave wording', () => {
@@ -114,14 +116,18 @@ function dueOn(dateStr) {
   return withFakeToday(dateStr, () => dueNotifications());
 }
 
-test('timing: Aug 2 sends the outbound "tomorrow" alert for the Oct 2 break', async () => {
-  const due = await dueOn('2026-08-02');
+test('timing: Aug 1 sends the outbound "tomorrow" alert for the Oct 2 break', async () => {
+  // Night-before journey is Oct 1; its booking opens Aug 1 + 60 = ... alert on Aug 1.
+  const due = await dueOn('2026-08-01');
   const oct = due.find((d) => d.key === 'out:2026-10-02');
-  assert.ok(oct, 'Oct 2 outbound alert should be due');
+  assert.ok(oct, 'Oct 2 outbound alert should be due on Aug 1');
   assert.match(oct.message, /Tomorrow is ticket opening/);
   // Breaks whose booking window is still far away must not fire yet.
   assert.ok(!due.some((d) => d.key === 'out:2026-11-07'));
   assert.ok(!due.some((d) => d.key === 'out:2026-12-25'));
+  // A day later the on-time alert is gone — replaced by the catch-up variant.
+  const nextDay = (await dueOn('2026-08-02')).find((d) => d.key === 'out:2026-10-02');
+  assert.match(nextDay.message, /Ticket booking is already open/);
 });
 
 test('timing: Aug 4 sends the return alert for the Oct 4 return journey', async () => {
